@@ -35,7 +35,6 @@
   • initScatter() cssW === 0 guard added (slow-phone safety)
   • pick() double-click race condition fixed with `picking` flag
   • scroll-behavior duplication resolved (CSS only)
-  • Share results button added
 -->
 <style>
 /* ─── TOKENS ─────────────────────────────────────────────────── */
@@ -268,13 +267,6 @@ body {
 .sec-num { font-size: 10px; font-weight: 600; color: var(--ink3); letter-spacing: .08em; text-transform: uppercase; }
 .sec-title { font-family: var(--fd); font-size: 14px; font-weight: 400; color: var(--ink); flex: 1; }
 
-/* Two-column grid for top sections */
-.results-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 20px;
-}
 .results-panel {
   background: #fff;
   border: 1px solid var(--rule);
@@ -296,48 +288,6 @@ body {
 .match-bw { height: 3px; background: var(--rule2); border-radius: 2px; overflow: hidden; }
 .match-bf { height: 100%; border-radius: 2px; background: var(--ink); transition: width 1s cubic-bezier(.16,1,.3,1); width: 0%; }
 .match-pct { font-size: 11px; font-weight: 500; color: var(--ink); flex-shrink: 0; min-width: 30px; text-align: right; }
-
-/* Profile bars — compact */
-.dim-group-res { margin-bottom: 12px; }
-.dim-group-res:last-child { margin-bottom: 0; }
-.dim-group-head {
-  display: flex; align-items: center; gap: 6px; margin-bottom: 7px;
-  font-size: 9px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--ink3);
-}
-.dim-group-head::before { content:''; width:14px; height:2px; border-radius:1px; flex-shrink:0; }
-.grp-nat .dim-group-head::before { background: var(--nat); }
-.grp-eu  .dim-group-head::before { background: var(--eu);  }
-.grp-str .dim-group-head::before { background: var(--str); }
-
-.dim-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
-.dim-bar-row:last-child { margin-bottom: 0; }
-.dim-bar-label { width: 100px; font-size: 10px; font-weight: 300; color: var(--ink3); flex-shrink: 0; line-height: 1.3; }
-.dim-bar-track { flex:1; height:4px; background:var(--rule2); border-radius:2px; overflow:visible; position:relative; }
-.dim-bar-fill  { height:100%; border-radius:2px; transition: width 1s cubic-bezier(.16,1,.3,1); width:0%; }
-.dim-bar-tick  { position:absolute; top:-2px; width:1.5px; height:8px; border-radius:1px; background:rgba(24,20,15,.20); }
-.dim-bar-val   { width:28px; font-size:10px; font-weight:500; text-align:right; flex-shrink:0; }
-.profile-legend {
-  font-size:9px; font-weight:300; color:var(--ink3); margin-bottom:10px;
-  display:flex; align-items:center; gap:7px;
-}
-.profile-legend::before { content:''; width:14px; height:1.5px; background:rgba(24,20,15,.22); flex-shrink:0; }
-
-/* Profile description block */
-.profile-desc {
-  background: #fff;
-  border: 1px solid var(--rule);
-  border-radius: var(--rc);
-  padding: 16px;
-  margin-bottom: 20px;
-}
-.profile-desc-head {
-  font-size: 10px; font-weight: 600; letter-spacing: .1em;
-  text-transform: uppercase; color: var(--ink3); margin-bottom: 8px;
-}
-.profile-desc-text {
-  font-size: 13px; font-weight: 300; color: var(--ink2); line-height: 1.75;
-}
-.profile-desc-text strong { font-weight: 600; color: var(--ink); }
 
 /* SK comparison */
 .sk-block { margin-bottom: 20px; }
@@ -434,7 +384,6 @@ body {
 @media (max-width: 500px) {
   .masthead { flex-direction:column; align-items:flex-start; }
   .masthead-meta { text-align:left; }
-  .results-grid { grid-template-columns: 1fr; }
   .dim-bar-label { width: 88px; }
 }
 </style>
@@ -458,7 +407,7 @@ body {
     — a ukážu, ako ďaleko siaha váš pocit domova: od mesta cez Slovensko a Európu až po celý svet.
   </p>
   <div class="cta-row">
-    <button class="btn-start" type="button" onclick="startQuiz()">
+    <button class="btn-start" type="button" id="btn-start">
       Začať
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
         <line x1="5" y1="12" x2="19" y2="12"/>
@@ -500,7 +449,7 @@ body {
 
   <p style="font-size:10px;color:var(--ink3);margin-top:6px;font-weight:300">Vaše odpovede sú anonymné a nikde sa neukladajú.</p>
   <div class="back-row">
-    <button class="btn-back" type="button" id="btn-back" onclick="goBack()">
+    <button class="btn-back" type="button" id="btn-back">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
         <line x1="19" y1="12" x2="5" y2="12"/>
         <polyline points="12,19 5,12 12,5"/>
@@ -588,6 +537,7 @@ const WEIGHTS = {
   world:    0.220421,
 };
 const WEIGHT_SUM = Object.values(WEIGHTS).reduce((a,b) => a+b, 0);
+if (Math.abs(WEIGHT_SUM - 1.0) > 1e-6) { console.warn('WEIGHTS do not sum to 1:', WEIGHT_SUM); }
 
 /* MAX_DIST — weighted, computed from data so toSim() is calibrated */
 const MAX_DIST = (() => {
@@ -639,7 +589,7 @@ function toSim(dist) {
    Q6:    Dôvera v EÚ        (eu_trust)
    Q7:    Globálna orientácia (world)
 
-   NOTE on Q5 & Q6: Both map to 'europe' (G062).
+   NOTE on Q4 & Q5: Both map to 'europe' (G062).
    Two differently-worded questions measuring the same construct
    gives a more reliable estimate than one. The mean of the two
    answers is used in matching — this is standard in psychometrics.
@@ -662,7 +612,7 @@ const QUESTIONS = [
     lo:'Vôbec nie blízko', hi:'Veľmi blízko',
     opts:[
       {label:'Veľmi blízko',     sub:'Táto krajina je jadrom mojej identity', val:100},
-      {label:'Dosť blízko',      sub:'Väčšinou sa cítim byť jeho súčasťou',val:66 },
+      {label:'Dosť blízko',      sub:'Väčšinou sa cítim byť jej súčasťou',val:66 },
       {label:'Nie veľmi blízko', sub:'Skôr neutrálny vzťah',               val:33 },
       {label:'Vôbec nie blízko', sub:'Krajina, kde žijem, ma neformuje',               val:0  },
     ],
@@ -701,7 +651,7 @@ const QUESTIONS = [
     ],
   },
   {
-    subscale:'eu', dim:'eu_trust',
+    subscale:'eut', dim:'eu_trust',
     text:'Nakoľko dôverujete Európskej únii ako inštitúcii?',
     lo:'Vôbec nedôverujem', hi:'Veľmi dôverujem',
     opts:[
@@ -719,13 +669,13 @@ const QUESTIONS = [
       {label:'Veľmi silno', sub:'Svet je mojím spoločenstvom',              val:100},
       {label:'Dosť silno',  sub:'Globálna perspektíva mi je blízka',        val:66 },
       {label:'Nie veľmi',   sub:'Menej výrazný zmysel pre globálnu príslušnosť',val:33 },
-      {label:'Vôbec nie',   sub:'Lokálna a národná identita dominuje',      val:0  },
+      {label:'Vôbec nie',   sub:'Nemám pocit príslušnosti k svetovému spoločenstvu', val:0  },
     ],
   },
 ];
 
-const SUB_COLORS = { nat:'#1e4494', eu:'#0e6050', str:'#724488' };
-const SUB_LABELS = { nat:'Národná identita', eu:'Európska identita', str:'Globálna orientácia' };
+const SUB_COLORS = { nat:'#1e4494', eu:'#0e6050', eut:'#0e6050', str:'#724488' };
+const SUB_LABELS = { nat:'Národná identita', eu:'Európska identita', eut:'Dôvera v EÚ', str:'Globálna orientácia' };
 
 /* ═══════════════════════════════════════════════════════════════
    STATE
@@ -831,6 +781,16 @@ function pick(btn, dim, raw) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   LOADING STATE — shown briefly before results render
+═══════════════════════════════════════════════════════════════ */
+function showLoading() {
+  const el = document.getElementById('s-results');
+  el.innerHTML = `<div style="padding:60px 0;text-align:center;color:var(--ink3);font-size:13px;font-weight:300">
+    Vypočítavam výsledky…</div>`;
+  showScreen('s-results');
+}
+
+/* ═══════════════════════════════════════════════════════════════
    COUNTER-INTUITIVE FACT BANNER
    Shows one surprising datum relevant to the user's best match.
 ═══════════════════════════════════════════════════════════════ */
@@ -865,6 +825,12 @@ function buildFact(best) {
    RESULTS
 ═══════════════════════════════════════════════════════════════ */
 function showResults() {
+  showLoading();
+  // Defer heavy render to next frame so loading screen paints first
+  requestAnimationFrame(() => setTimeout(_renderResults, 40));
+}
+
+function _renderResults() {
   const ranked = COUNTRIES
     .map(c => ({ ...c, dist: computeDist(c) }))
     .sort((a, b) => a.dist - b.dist);
@@ -879,7 +845,7 @@ function showResults() {
     buildFact(best) +
     buildChartSection() +
     `<div style="margin-top:20px">` +
-    `<div class="sec-head"><span class="sec-num">02</span><span class="sec-title">Najpodobnejšie krajiny &amp; profil</span></div>` +
+    `<div class="sec-head"><span class="sec-num">02</span><span class="sec-title">Najpodobnejšie krajiny</span></div>` +
     buildMatchesPanel(top3) +
     `</div>` +
     buildSKBlock(skSim) +
@@ -925,7 +891,7 @@ function buildHero(best, sim) {
     <div class="res-hero-flag" aria-hidden="true">${best.flag}</div>
     <p class="res-kicker">Váš profil je najbližší k</p>
     <h2 class="res-title"><span class="res-match">${best.sk}</span></h2>
-    <p class="res-sub">Pozrite sa, kde sa nachádzate na mape nižšie · hodnotová vzdialenosť: ${sim}%</p>
+    <p class="res-sub">Pozrite sa, kde sa nachádzate na mape nižšie · podobnosť: ${sim}%</p>
   </div>`;
 }
 
@@ -997,7 +963,8 @@ function buildInsights() {
 
   if (sproud !== null && scountry !== null) {
     const natAvg = (sproud + scountry) / 2;
-    const hi = natAvg > 84;
+    const MEAN_NAT = COUNTRIES.reduce((s,c) => s + (c.proud + c.country) / 2, 0) / COUNTRIES.length;
+    const hi = natAvg > MEAN_NAT;
     parts.push(makeInsight(
       hi ? '#1e4494' : '#8a6800',
       hi ? 'Silná väzba k národu a vlasti' : 'Miernejšia väzba k národu',
@@ -1027,7 +994,7 @@ function buildInsights() {
       hi ? '#0e6050' : '#724488',
       hi ? 'Silná lokálna zakotvenosť' : 'Menej výrazná lokálna zakotvenosť',
       hi
-        ? `Silná blízkosť k miestu bydliska je najvýraznejšia v <strong>Slovensku</strong> (95,7%), <strong>Grécku</strong> (93,1%) a <strong>Španielsku</strong> (92,8%). Lokálna identita a národná identita sa navzájom nevylučujú — v sociológii sa tento vzor nazýva „nested identity".`
+        ? `Silná blízkosť k miestu bydliska je najvýraznejšia v <strong>Slovensku</strong> (95,7%), <strong>Grécku</strong> (93,1%) a <strong>Španielsku</strong> (92,8%). Silná lokálna identita a silná národná identita sa pritom navzájom nevylučujú.`
         : `Menej výrazná lokálna zakotvenosť prevláda v <strong>Holandsku</strong> (70,4%) a <strong>Fínsku</strong> (73,9%). Výskumníci to spájajú s vyššou geografickou mobilitou a urbanizáciou — v krajinách kde ľudia často sťahujú je väzba na miesto prirodzene slabšia.`
     ));
   }
@@ -1035,7 +1002,7 @@ function buildInsights() {
   if (!parts.length) return '';
   return `<div class="insights">
     <div class="sec-head"><span class="sec-num">04</span>
-      <span class="sec-title">Čo hovorí váš profil?</span></div>
+      <span class="sec-title">K čomu sa blížia vaše odpovede?</span></div>
     ${parts.join('')}
   </div>`;
 }
@@ -1066,8 +1033,8 @@ function buildChartSection() {
       <div class="chart-tooltip" id="tooltip" aria-hidden="true"></div>
     </div>
     <p class="chart-caption">
-      Os X: Národná identita (G006+G257) · Os Y: Európska identita (G062+E069_18)<br/>
-      Veľkosť bodu = globálna orientácia (G063) · Zlatá = Slovensko · Červená = váš profil<br/>
+      Os X: Národná identita · Os Y: Európska identita<br/>
+      Veľkosť bodu = globálna orientácia · Zlatá = Slovensko · Červená = váš profil<br/>
       <em>Kliknite alebo dotknite sa bodu pre meno krajiny</em>
     </p>
   </div>`;
@@ -1258,11 +1225,15 @@ function buildMethodBlock() {
     <div class="sec-head"><span class="sec-num">05</span>
       <span class="sec-title">O výskume a metodológii</span></div>
     <div class="method-body-always">
-      <p>Otázky pochádzajú z datasetu <strong>Joint EVS/WVS 2017–2022</strong> — rozsiahleho výskumu hodnôt s reprezentatívnymi vzorkami z celej Európy. Vaše odpovede sa porovnávajú s priemernými výsledkami 20 krajín EÚ: čím podobnejšie sú vaše postoje k priemeru danej krajiny, tým vyššie percento zhody. Dáta môžu od doby zberu čiastočne zastarať.</p>
+      <p>Otázky pochádzajú z datasetu <strong>Joint EVS/WVS 2017–2022</strong> — rozsiahleho výskumu hodnôt s reprezentatívnymi vzorkami z celej Európy. Vaše odpovede sa porovnávajú s priemernými výsledkami 20 krajín EÚ: čím podobnejšie sú vaše postoje k priemeru danej krajiny, tým vyššie percento podobnosti. Dáta môžu od doby zberu čiastočne zastarať.</p>
       <p style="margin-top:8px">Zdroj: <a href="https://doi.org/10.4232/1.14320" target="_blank" rel="noopener">doi:&thinsp;10.4232/1.14320</a> · <a href="https://europeanvaluesstudy.eu/" target="_blank" rel="noopener">europeanvaluesstudy.eu</a></p>
     </div>
   </div>`;
 }
+
+// Wire up static buttons
+document.getElementById('btn-start').addEventListener('click', startQuiz);
+document.getElementById('btn-back').addEventListener('click', goBack);
 </script>
 
 </body>
